@@ -1,0 +1,14 @@
+version: "3"
+
+services:
+  local-newsletter-postgres:
+    image: postgres:15
+    hostname: local-newsletter-postgres
+    container_name: local-newsletter-postgres
+    restart: always
+    ports:
+    - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: welcome
+      POSTGRES_DB: newsletter
