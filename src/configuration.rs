@@ -13,7 +13,23 @@ pub struct DatabaseSettings {
     pub port: u16,
     pub username: String,
     pub password: String,
-    pub instance: String,
+    pub database: String,
+}
+
+impl DatabaseSettings {
+    pub fn connection_string(&self) -> String {
+        format!(
+            "postgres://{}:{}@{}:{}/{}",
+            self.username, self.password, self.host, self.port, self.database,
+        )
+    }
+
+    pub fn connection_string_without_database(&self) -> String {
+        format!(
+            "postgres://{}:{}@{}:{}",
+            self.username, self.password, self.host, self.port,
+        )
+    }
 }
 
 #[derive(Deserialize)]

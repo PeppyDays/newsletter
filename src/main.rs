@@ -1,6 +1,7 @@
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
 
 use newsletter::{configuration::get_configuration, startup::run};
+use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]
 async fn main() {
@@ -12,5 +13,12 @@ async fn main() {
     ))
     .expect("Failed to bind a port for application");
 
-    run(listener).await;
+    let pool = PgPoolOptions::new()
+        .min_connections(5)
+        .max_connections(5)
+        .connect(&configuration.database.connection_string())
+        .await
+        .expect("Failed to create database connection pool");
+
+    run(listener, pool).await;
 }

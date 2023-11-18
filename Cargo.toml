@@ -13,6 +13,7 @@ name = "newsletter"
 [dependencies]
 anyhow = "1"
 axum = { version = "0.6", features = ["headers"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 config = { version = "0.13", default-features = false, features = ["yaml"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -20,6 +21,7 @@ sqlx = { version = "0.7", default-features = false, features = ["uuid", "migrate
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
 reqwest = "0.11"

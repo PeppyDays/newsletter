@@ -6,4 +6,4 @@ database:
   port: 5432
   username: newsletter
   password: welcome
-  instance: newsletter
+  database: newsletter

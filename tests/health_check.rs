@@ -1,12 +1,17 @@
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 
-use newsletter::startup::run;
+use newsletter::{
+    configuration::{get_configuration, DatabaseSettings},
+    startup::run,
+};
 use reqwest::{Client, Response, StatusCode};
 use serde::Serialize;
+use sqlx::{postgres::PgPoolOptions, Connection, Executor, PgConnection, Pool, Postgres};
+use uuid::Uuid;
 
 #[tokio::test]
 async fn health_check_works() {
-    let app = App::new();
+    let app = App::new().await;
 
     let response = app.get("/health_check").await;
 
@@ -16,17 +21,25 @@ async fn health_check_works() {
 
 #[tokio::test]
 async fn subscribe_returns_200_for_valid_form_data() {
-    let app = App::new();
+    let app = App::new().await;
     let parameter = [("name", "arine"), ("email", "peppydays@gmail.com")];
 
     let response = app.form("/subscriptions", &parameter).await;
 
     assert_eq!(response.status(), StatusCode::OK);
+
+    let saved = sqlx::query!("SELECT email, name FROM subscriptions")
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+
+    assert_eq!(saved.email, "peppydays@gmail.com");
+    assert_eq!(saved.name, "arine");
 }
 
 #[tokio::test]
 async fn subscribe_returns_422_when_some_attributes_in_request_are_missing() {
-    let app = App::new();
+    let app = App::new().await;
     let parameters = vec![[("name", "arine")], [("email", "peppydays@gmail.com")]];
 
     for parameter in parameters {
@@ -39,18 +52,56 @@ async fn subscribe_returns_422_when_some_attributes_in_request_are_missing() {
 struct App {
     address: SocketAddr,
     client: Client,
+    pool: Pool<Postgres>,
 }
 
 impl App {
-    fn new() -> Self {
+    async fn new() -> Self {
+        // get configuration and randomise database name
+        let mut configuration = get_configuration().expect("Failed to read configuration");
+        configuration.database.database = Uuid::new_v4().to_string();
+
+        // create a connection to postgres database
+        // and create randomised database
+        let mut connection =
+            PgConnection::connect(&configuration.database.connection_string_without_database())
+                .await
+                .expect("Failed to connect to Postgres");
+
+        connection
+            .execute(format!(r#"CREATE DATABASE "{}";"#, configuration.database.database).as_str())
+            .await
+            .expect("Failed to create database.");
+
+        // create a database connection pool pointing the new randomised database
+        let pool = PgPoolOptions::new()
+            .min_connections(5)
+            .max_connections(5)
+            .connect(&configuration.database.connection_string())
+            .await
+            .expect("Failed to create database connection pool");
+
+        // migrate database
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("Failed to migrate the database");
+
+        // start an application
         let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
             .expect("Failed to start an app in test");
         let address = listener.local_addr().unwrap();
-        tokio::spawn(run(listener));
 
+        tokio::spawn(run(listener, pool.clone()));
+
+        // provide a reqwest client
         let client = Client::new();
 
-        App { address, client }
+        App {
+            address,
+            client,
+            pool,
+        }
     }
 }
 
