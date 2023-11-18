@@ -1,6 +1,6 @@
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 
-use newsletter::run;
+use newsletter::startup::run;
 use reqwest::{Client, Response, StatusCode};
 use serde::Serialize;
 

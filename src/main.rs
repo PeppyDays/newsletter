@@ -1,6 +1,6 @@
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
 
-use newsletter::run;
+use newsletter::startup::run;
 
 #[tokio::main]
 async fn main() {
