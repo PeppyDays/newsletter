@@ -2,10 +2,22 @@ use std::net::TcpListener;
 
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::routing::get;
-use axum::{Router, Server};
+use axum::routing::{get, post};
+use axum::{Form, Router, Server};
+use serde::Deserialize;
 
 async fn check_health() -> impl IntoResponse {
+    StatusCode::OK
+}
+
+#[derive(Debug, Deserialize)]
+struct FormData {
+    email: String,
+    name: String,
+}
+
+async fn subscribe(Form(data): Form<FormData>) -> impl IntoResponse {
+    println!("{:?}", data);
     StatusCode::OK
 }
 
@@ -20,5 +32,7 @@ pub async fn run(listener: TcpListener) {
 }
 
 pub fn router() -> Router {
-    Router::new().route("/health_check", get(check_health))
+    Router::new()
+        .route("/health_check", get(check_health))
+        .route("/subscriptions", post(subscribe))
 }
