@@ -1,13 +1,11 @@
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 
-use newsletter::{
-    configuration::{get_configuration, DatabaseSettings},
-    startup::run,
-};
 use reqwest::{Client, Response, StatusCode};
 use serde::Serialize;
 use sqlx::{postgres::PgPoolOptions, Connection, Executor, PgConnection, Pool, Postgres};
 use uuid::Uuid;
+
+use newsletter::{configuration::get_configuration, startup::run};
 
 #[tokio::test]
 async fn health_check_works() {
