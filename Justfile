@@ -8,7 +8,10 @@ build:
 	cargo build
 
 run: migrate
-	cargo run
+	cargo run | bunyan
+
+watch-run: migrate
+	cargo watch -x run | bunyan
 
 container-up:
 	docker compose up -d
