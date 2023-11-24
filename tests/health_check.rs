@@ -1,6 +1,7 @@
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 
 use reqwest::{Client, Response, StatusCode};
+use secrecy::ExposeSecret;
 use serde::Serialize;
 use sqlx::{postgres::PgPoolOptions, Connection, Executor, PgConnection, Pool, Postgres};
 use uuid::Uuid;
@@ -61,10 +62,14 @@ impl App {
 
         // create a connection to postgres database
         // and create randomised database
-        let mut connection =
-            PgConnection::connect(&configuration.database.connection_string_without_database())
-                .await
-                .expect("Failed to connect to Postgres");
+        let mut connection = PgConnection::connect(
+            configuration
+                .database
+                .connection_string_without_database()
+                .expose_secret(),
+        )
+        .await
+        .expect("Failed to connect to Postgres");
 
         connection
             .execute(format!(r#"CREATE DATABASE "{}";"#, configuration.database.database).as_str())
@@ -75,7 +80,7 @@ impl App {
         let pool = PgPoolOptions::new()
             .min_connections(5)
             .max_connections(5)
-            .connect(&configuration.database.connection_string())
+            .connect(configuration.database.connection_string().expose_secret())
             .await
             .expect("Failed to create database connection pool");
 

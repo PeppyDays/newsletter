@@ -1,5 +1,6 @@
-use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
+use std::{net::TcpListener, time::Duration};
 
+use secrecy::ExposeSecret;
 use sqlx::postgres::PgPoolOptions;
 
 use newsletter::{
@@ -15,16 +16,17 @@ async fn main() {
 
     let configuration = get_configuration().expect("Failed to read configuration");
 
-    let listener = TcpListener::bind(SocketAddrV4::new(
-        Ipv4Addr::LOCALHOST,
-        configuration.application.port,
+    let listener = TcpListener::bind(format!(
+        "{}:{}",
+        configuration.application.host, configuration.application.port,
     ))
     .expect("Failed to bind a port for application");
 
     let pool = PgPoolOptions::new()
         .min_connections(5)
         .max_connections(5)
-        .connect(&configuration.database.connection_string())
+        .acquire_timeout(Duration::from_secs(5))
+        .connect(configuration.database.connection_string().expose_secret())
         .await
         .expect("Failed to create database connection pool");
 

@@ -10,6 +10,9 @@ build:
 run: migrate
 	cargo run | bunyan
 
+sqlx-prepare:
+	cargo sqlx prepare --workspace
+
 watch-run: migrate
 	cargo watch -x run | bunyan
 
