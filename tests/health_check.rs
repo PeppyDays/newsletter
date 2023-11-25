@@ -52,9 +52,9 @@ async fn subscribe_returns_422_when_some_attributes_in_request_are_missing() {
 async fn subscribe_returns_400_when_fields_are_present_but_empty() {
     let app = App::new().await;
     let test_cases = [
-        // [("name", "arine"), ("email", "")],
+        [("name", "arine"), ("email", "")],
         [("name", ""), ("email", "pepppydays@gmail.com")],
-        // [("name", "arine"), ("email", "definitely-not-an-email")],
+        [("name", "arine"), ("email", "definitely-not-an-email")],
     ];
 
     for test_case in test_cases {
