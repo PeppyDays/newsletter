@@ -14,6 +14,17 @@ pub struct FormData {
     name: String,
 }
 
+impl TryFrom<FormData> for NewSubscriber {
+    type Error = String;
+
+    fn try_from(data: FormData) -> Result<Self, Self::Error> {
+        let name = SubscriberName::parse(data.name)?;
+        let email = SubscriberEmail::parse(data.email)?;
+
+        Ok(Self { name, email })
+    }
+}
+
 #[tracing::instrument(
     name = "Adding a new subscriber",
     skip(form, pool),
@@ -26,16 +37,10 @@ pub async fn subscribe(
     State(pool): State<Pool<Postgres>>,
     Form(form): Form<FormData>,
 ) -> impl IntoResponse {
-    let name = match SubscriberName::parse(form.name) {
-        Ok(name) => name,
+    let new_subscriber = match form.try_into() {
+        Ok(subscriber) => subscriber,
         Err(_) => return StatusCode::BAD_REQUEST,
     };
-    let email = match SubscriberEmail::parse(form.email) {
-        Ok(email) => email,
-        Err(_) => return StatusCode::BAD_REQUEST,
-    };
-    let new_subscriber = NewSubscriber { email, name };
-
     match insert_subscriber(&pool, &new_subscriber).await {
         Ok(_) => StatusCode::OK,
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
