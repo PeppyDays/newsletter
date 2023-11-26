@@ -3,10 +3,13 @@ use secrecy::{ExposeSecret, Secret};
 use serde::Deserialize;
 use serde_aux::field_attributes::deserialize_number_from_string;
 
+use crate::domain::SubscriberEmail;
+
 #[derive(Deserialize)]
 pub struct Settings {
     pub database: DatabaseSettings,
     pub application: ApplicationSettings,
+    pub email_client: EmailClientSettings,
 }
 
 #[derive(Deserialize)]
@@ -59,4 +62,17 @@ pub fn get_configuration() -> Result<Settings, config::ConfigError> {
         .build()?;
 
     settings.try_deserialize::<Settings>()
+}
+
+#[derive(Deserialize)]
+pub struct EmailClientSettings {
+    pub base_url: String,
+    pub sender_email: String,
+    pub authorization_token: Secret<String>,
+}
+
+impl EmailClientSettings {
+    pub fn sender(&self) -> Result<SubscriberEmail, String> {
+        SubscriberEmail::parse(self.sender_email.clone())
+    }
 }

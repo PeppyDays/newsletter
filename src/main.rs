@@ -5,6 +5,7 @@ use sqlx::postgres::PgPoolOptions;
 
 use newsletter::{
     configuration::get_configuration,
+    email_client::EmailClient,
     startup::run,
     telemetry::{get_subscriber, initialize_subscriber},
 };
@@ -30,5 +31,15 @@ async fn main() {
         .await
         .expect("Failed to create database connection pool");
 
-    run(listener, pool).await;
+    let sender_email = configuration
+        .email_client
+        .sender()
+        .expect("Invalid sender email address");
+    let email_client = EmailClient::new(
+        configuration.email_client.base_url,
+        sender_email,
+        configuration.email_client.authorization_token,
+    );
+
+    run(listener, pool, email_client).await;
 }

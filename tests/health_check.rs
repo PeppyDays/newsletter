@@ -6,7 +6,7 @@ use serde::Serialize;
 use sqlx::{postgres::PgPoolOptions, Connection, Executor, PgConnection, Pool, Postgres};
 use uuid::Uuid;
 
-use newsletter::{configuration::get_configuration, startup::run};
+use newsletter::{configuration::get_configuration, email_client::EmailClient, startup::run};
 
 #[tokio::test]
 async fn health_check_works() {
@@ -100,6 +100,14 @@ impl App {
             .await
             .expect("Failed to create database connection pool");
 
+        // create a email client
+        let sender_email = configuration.email_client.sender().unwrap();
+        let email_client = EmailClient::new(
+            configuration.email_client.base_url,
+            sender_email,
+            configuration.email_client.authorization_token,
+        );
+
         // migrate database
         sqlx::migrate!("./migrations")
             .run(&pool)
@@ -111,7 +119,7 @@ impl App {
             .expect("Failed to start an app in test");
         let address = listener.local_addr().unwrap();
 
-        tokio::spawn(run(listener, pool.clone()));
+        tokio::spawn(run(listener, pool.clone(), email_client.clone()));
 
         // provide a reqwest client
         let client = Client::new();
