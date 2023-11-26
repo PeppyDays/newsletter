@@ -13,3 +13,4 @@ email_client:
   base_url: 127.0.0.1
   sender_email: peppydays@gmail.com
   authorization_token: secret
+  timeout_in_milliseconds: 10000

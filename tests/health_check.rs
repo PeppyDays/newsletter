@@ -102,10 +102,12 @@ impl App {
 
         // create a email client
         let sender_email = configuration.email_client.sender().unwrap();
+        let timeout = configuration.email_client.timeout();
         let email_client = EmailClient::new(
             configuration.email_client.base_url,
             sender_email,
             configuration.email_client.authorization_token,
+            timeout,
         );
 
         // migrate database
