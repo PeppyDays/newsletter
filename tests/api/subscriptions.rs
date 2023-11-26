@@ -7,7 +7,7 @@ async fn subscribe_returns_200_for_valid_form_data() {
     let app = App::new().await;
     let parameter = [("name", "arine"), ("email", "peppydays@gmail.com")];
 
-    let response = app.form("/subscriptions", &parameter).await;
+    let response = app.post_subscriptions(&parameter).await;
 
     assert_eq!(response.status(), StatusCode::OK);
 
@@ -26,7 +26,7 @@ async fn subscribe_returns_422_when_some_attributes_in_request_are_missing() {
     let test_cases = vec![[("name", "arine")], [("email", "peppydays@gmail.com")]];
 
     for test_case in test_cases {
-        let response = app.form("/subscriptions", &test_case).await;
+        let response = app.post_subscriptions(&test_case).await;
 
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
@@ -42,7 +42,7 @@ async fn subscribe_returns_400_when_fields_are_present_but_empty() {
     ];
 
     for test_case in test_cases {
-        let response = app.form("/subscriptions", &test_case).await;
+        let response = app.post_subscriptions(&test_case).await;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
