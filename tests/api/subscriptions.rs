@@ -1,4 +1,8 @@
 use reqwest::StatusCode;
+use wiremock::{
+    matchers::{method, path},
+    Mock, ResponseTemplate,
+};
 
 use crate::helpers::App;
 
@@ -7,17 +11,38 @@ async fn subscribe_returns_200_for_valid_form_data() {
     let app = App::new().await;
     let parameter = [("name", "arine"), ("email", "peppydays@gmail.com")];
 
+    Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&app.email_server)
+        .await;
+
     let response = app.post_subscriptions(&parameter).await;
 
     assert_eq!(response.status(), StatusCode::OK);
+}
 
-    let saved = sqlx::query!("SELECT email, name FROM subscriptions")
+#[tokio::test]
+async fn subscribe_persists_the_new_subscriber() {
+    let app = App::new().await;
+    let parameter = [("name", "arine"), ("email", "peppydays@gmail.com")];
+
+    Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&app.email_server)
+        .await;
+
+    let _response = app.post_subscriptions(&parameter).await;
+
+    let saved = sqlx::query!("SELECT email, name, status FROM subscriptions")
         .fetch_one(&app.pool)
         .await
         .unwrap();
 
     assert_eq!(saved.email, "peppydays@gmail.com");
     assert_eq!(saved.name, "arine");
+    assert_eq!(saved.status, "pending_confirmation");
 }
 
 #[tokio::test]
@@ -46,4 +71,38 @@ async fn subscribe_returns_400_when_fields_are_present_but_empty() {
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
+}
+
+#[tokio::test]
+async fn subscribe_sends_confirmation_email_for_valid_data() {
+    let app = App::new().await;
+    let parameter = [("name", "arine"), ("email", "peppydays@gmail.com")];
+
+    Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&app.email_server)
+        .await;
+
+    let _response = app.post_subscriptions(&parameter).await;
+}
+
+#[tokio::test]
+async fn subscribe_sends_confirmation_email_with_link() {
+    let app = App::new().await;
+    let parameter = [("name", "arine"), ("email", "peppydays@gmail.com")];
+
+    Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&app.email_server)
+        .await;
+
+    let _response = app.post_subscriptions(&parameter).await;
+
+    let email_request = &app.email_server.received_requests().await.unwrap()[0];
+    let links = app.get_confirmation_links(email_request);
+
+    assert_eq!(links.in_html, links.in_text);
 }

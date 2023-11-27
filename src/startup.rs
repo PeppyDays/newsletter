@@ -14,13 +14,17 @@ use uuid::Uuid;
 use crate::{
     configuration::Settings,
     email_client::EmailClient,
-    routes::{check_health, subscribe},
+    routes::{check_health, confirm, subscribe},
 };
+
+#[derive(Clone)]
+pub struct AccessUrl(pub String);
 
 #[derive(Clone)]
 pub struct AppState {
     pub pool: Pool<Postgres>,
     pub email_client: EmailClient,
+    pub access_url: AccessUrl,
 }
 
 impl FromRef<AppState> for Pool<Postgres> {
@@ -35,8 +39,15 @@ impl FromRef<AppState> for EmailClient {
     }
 }
 
+impl FromRef<AppState> for AccessUrl {
+    fn from_ref(state: &AppState) -> Self {
+        state.access_url.clone()
+    }
+}
+
 pub async fn run(listener: TcpListener, app_state: AppState) {
     let app = Router::new()
+        .route("/subscriptions/confirm", get(confirm))
         .route("/subscriptions", post(subscribe))
         .with_state(app_state)
         .route("/health_check", get(check_health))
@@ -75,6 +86,7 @@ pub async fn get_app_state(configuration: &Settings) -> AppState {
     AppState {
         pool: db_connection_pool(configuration).await,
         email_client: email_client(configuration).await,
+        access_url: AccessUrl(configuration.application.access_url.clone()),
     }
 }
 
@@ -96,7 +108,7 @@ async fn email_client(configuration: &Settings) -> EmailClient {
     let timeout = configuration.email_client.timeout();
 
     EmailClient::new(
-        configuration.email_client.base_url.to_owned(),
+        configuration.email_client.access_url.to_owned(),
         sender_email,
         configuration.email_client.authorization_token.to_owned(),
         timeout,

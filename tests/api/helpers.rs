@@ -10,11 +10,13 @@ use secrecy::ExposeSecret;
 use serde::Serialize;
 use sqlx::{Connection, Executor, PgConnection, Pool, Postgres};
 use uuid::Uuid;
+use wiremock::MockServer;
 
 pub struct App {
     address: SocketAddr,
     client: Client,
     pub pool: Pool<Postgres>,
+    pub email_server: MockServer,
 }
 
 impl App {
@@ -24,9 +26,14 @@ impl App {
             .expect("Failed to start an test application");
         let address = listener.local_addr().unwrap();
 
+        // run email server
+        let email_server = MockServer::start().await;
+
         // get configuration and randomise database name
         let mut configuration = get_configuration().expect("Failed to read configuration");
+        configuration.application.access_url = format!("http://{}", address);
         configuration.database.database = Uuid::new_v4().to_string();
+        configuration.email_client.access_url = email_server.uri();
 
         // initialise randomise database
         App::initialise_database(&configuration).await;
@@ -53,6 +60,7 @@ impl App {
             address,
             client,
             pool,
+            email_server,
         }
     }
 
@@ -76,7 +84,7 @@ impl App {
 }
 
 impl App {
-    async fn get(&self, path: &str) -> Response {
+    pub async fn get(&self, path: &str) -> Response {
         self.client
             .get(format!("http://{}{}", self.address, path))
             .send()
@@ -94,7 +102,7 @@ impl App {
     //         .expect("Failed to send POST request")
     // }
 
-    async fn form<T: Serialize + ?Sized>(&self, path: &str, parameter: &T) -> Response {
+    pub async fn form<T: Serialize + ?Sized>(&self, path: &str, parameter: &T) -> Response {
         self.client
             .post(format!("http://{}{}", self.address, path))
             .form(parameter)
@@ -111,5 +119,33 @@ impl App {
 
     pub async fn post_subscriptions<T: Serialize + ?Sized>(&self, parameter: &T) -> Response {
         self.form("/subscriptions", parameter).await
+    }
+}
+
+pub struct ConfirmationLinks {
+    pub in_html: reqwest::Url,
+    pub in_text: reqwest::Url,
+}
+
+impl App {
+    pub fn get_confirmation_links(&self, email_request: &wiremock::Request) -> ConfirmationLinks {
+        let body: serde_json::Value = serde_json::from_slice(&email_request.body).unwrap();
+
+        let get_link = |s: &str| {
+            let links: Vec<_> = linkify::LinkFinder::new()
+                .links(s)
+                .filter(|l| *l.kind() == linkify::LinkKind::Url)
+                .collect();
+            assert_eq!(links.len(), 1);
+            links[0].as_str().to_owned()
+        };
+
+        let link_in_html = &get_link(body["HtmlBody"].as_str().unwrap());
+        let link_in_text = &get_link(body["TextBody"].as_str().unwrap());
+
+        ConfirmationLinks {
+            in_html: reqwest::Url::parse(link_in_html).unwrap(),
+            in_text: reqwest::Url::parse(link_in_text).unwrap(),
+        }
     }
 }
