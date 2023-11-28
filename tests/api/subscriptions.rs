@@ -106,3 +106,18 @@ async fn subscribe_sends_confirmation_email_with_link() {
 
     assert_eq!(links.in_html, links.in_text);
 }
+
+#[tokio::test]
+async fn subscribe_fails_if_there_is_fatal_database_error() {
+    let app = App::new().await;
+    let parameter = [("name", "arine"), ("email", "peppydays@gmail.com")];
+
+    sqlx::query!("ALTER TABLE subscription_tokens DROP COLUMN subscription_token")
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
+    let response = app.post_subscriptions(&parameter).await;
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+}
