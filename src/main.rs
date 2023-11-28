@@ -6,7 +6,7 @@ use newsletter::{
 
 #[tokio::main]
 async fn main() {
-    let subscriber = get_subscriber("newsletter".into(), "info".into());
+    let subscriber = get_subscriber("newsletter".into(), "info".into(), std::io::stdout);
     initialize_subscriber(subscriber);
 
     let configuration = get_configuration().expect("Failed to read configuration");

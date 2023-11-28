@@ -1,16 +1,31 @@
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 
+use once_cell::sync::Lazy;
 use reqwest::{Client, Response};
 
 use newsletter::{
     configuration::{get_configuration, Settings},
     startup::{get_app_state, run},
+    telemetry::{get_subscriber, initialize_subscriber},
 };
 use secrecy::ExposeSecret;
 use serde::Serialize;
 use sqlx::{Connection, Executor, PgConnection, Pool, Postgres};
 use uuid::Uuid;
 use wiremock::MockServer;
+
+static TRACING: Lazy<()> = Lazy::new(|| {
+    let default_filter_level = "info".to_string();
+    let subscriber_name = "test".to_string();
+
+    if std::env::var("TEST_LOG").is_ok() {
+        let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::stdout);
+        initialize_subscriber(subscriber);
+    } else {
+        let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::sink);
+        initialize_subscriber(subscriber);
+    };
+});
 
 pub struct App {
     address: SocketAddr,
@@ -21,6 +36,8 @@ pub struct App {
 
 impl App {
     pub async fn new() -> Self {
+        Lazy::force(&TRACING);
+
         // configure listener
         let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
             .expect("Failed to start an test application");

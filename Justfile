@@ -1,8 +1,11 @@
 default:
 	just --list
 
-test:
+test: migrate
 	cargo test
+
+test_debug: migrate
+	TEST_LOG=true cargo test | bunyan
 
 build:
 	cargo build
