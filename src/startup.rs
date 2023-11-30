@@ -1,14 +1,17 @@
 use std::{net::TcpListener, time::Duration};
 
 use axum::{
+    body::BoxBody,
     extract::{FromRef, MatchedPath},
     http::Request,
+    response::Response,
     routing::{get, post},
     Router, Server,
 };
 use secrecy::ExposeSecret;
 use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
-use tower_http::trace::TraceLayer;
+use tower_http::{classify::ServerErrorsFailureClass, trace::TraceLayer};
+use tracing::Span;
 use uuid::Uuid;
 
 use crate::{
@@ -58,8 +61,9 @@ pub async fn run(listener: TcpListener, app_state: AppState) {
                     .extensions()
                     .get::<MatchedPath>()
                     .map(MatchedPath::as_str);
+
                 tracing::info_span!(
-                    "Starting HTTP request",
+                    "Processing HTTP request",
                     method = ?request.method(),
                     path,
                     request_id = %Uuid::new_v4(),
