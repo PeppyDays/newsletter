@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 
+use anyhow::Context;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
@@ -53,34 +54,20 @@ pub async fn subscribe(
     let new_subscriber = form.try_into()?;
     let subscription_token = generate_subscription_token();
 
-    let mut transaction = pool.begin().await.map_err(|error| {
-        SubscribeError::UnexpectedError(
-            Box::new(error),
-            "Failed to acquire a PostgreSQL connection from the pool".into(),
-        )
-    })?;
+    let mut transaction = pool
+        .begin()
+        .await
+        .context("Failed to acquire a PostgreSQL connection from the pool")?;
     insert_subscriber(&mut transaction, &new_subscriber)
         .await
-        .map_err(|error| {
-            SubscribeError::UnexpectedError(
-                Box::new(error),
-                "Failed to insert new subscriber in the database".into(),
-            )
-        })?;
+        .context("Failed to insert new subscriber in the database")?;
     store_token(&mut transaction, &new_subscriber, &subscription_token)
         .await
-        .map_err(|error| {
-            SubscribeError::UnexpectedError(
-                Box::new(error),
-                "Failed to store the confirmation token for a new subscriber".into(),
-            )
-        })?;
-    transaction.commit().await.map_err(|error| {
-        SubscribeError::UnexpectedError(
-            Box::new(error),
-            "Failed to commit SQL transaction to store a new subscriber".into(),
-        )
-    })?;
+        .context("Failed to store the confirmation token for a new subscriber")?;
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit SQL transaction to store a new subscriber")?;
 
     send_confirmation_email(
         &email_client,
@@ -89,12 +76,8 @@ pub async fn subscribe(
         &subscription_token,
     )
     .await
-    .map_err(|error| {
-        SubscribeError::UnexpectedError(
-            Box::new(error),
-            "Failed to send a confirmation email".into(),
-        )
-    })?;
+    .context("Failed to send a confirmation email")?;
+
     Ok(StatusCode::OK)
 }
 
@@ -182,8 +165,8 @@ async fn store_token(
 pub enum SubscribeError {
     #[error("{0}")]
     ValidationError(String),
-    #[error("{1}")]
-    UnexpectedError(#[source] Box<dyn std::error::Error>, String),
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
 }
 
 impl Debug for SubscribeError {
@@ -196,9 +179,9 @@ impl IntoResponse for SubscribeError {
     fn into_response(self) -> axum::response::Response {
         match self {
             SubscribeError::ValidationError(message) => (StatusCode::BAD_REQUEST, Json(message)),
-            SubscribeError::UnexpectedError(error, message) => {
-                tracing::error!("{}\n{:?}", message, error);
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(message))
+            SubscribeError::UnexpectedError(_) => {
+                tracing::error!("{:?}", self);
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(self.to_string()))
             }
         }
         .into_response()
@@ -209,7 +192,7 @@ fn error_chain_fmt(
     e: &impl std::error::Error,
     f: &mut std::fmt::Formatter<'_>,
 ) -> std::fmt::Result {
-    writeln!(f, "{}\n", e)?;
+    writeln!(f, "{}", e)?;
     let mut current = e.source();
     while let Some(cause) = current {
         writeln!(f, "Caused by:\n\t{}", cause)?;

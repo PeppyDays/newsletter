@@ -1,17 +1,14 @@
 use std::{net::TcpListener, time::Duration};
 
 use axum::{
-    body::BoxBody,
     extract::{FromRef, MatchedPath},
     http::Request,
-    response::Response,
     routing::{get, post},
     Router, Server,
 };
 use secrecy::ExposeSecret;
 use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
-use tower_http::{classify::ServerErrorsFailureClass, trace::TraceLayer};
-use tracing::Span;
+use tower_http::trace::TraceLayer;
 use uuid::Uuid;
 
 use crate::{

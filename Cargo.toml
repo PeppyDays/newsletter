@@ -11,7 +11,7 @@ path = "src/main.rs"
 name = "newsletter"
 
 [dependencies]
-# anyhow = "1"
+anyhow = "1"
 axum = { version = "0.6", features = ["headers", "tracing"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 config = { version = "0.13", default-features = false, features = ["yaml"] }
