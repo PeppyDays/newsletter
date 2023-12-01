@@ -109,15 +109,14 @@ impl App {
             .expect("Failed to send GET request")
     }
 
-    // fn post(&self, path: &str, headers: HeaderMap, body: Body) -> Response {
-    //     self.client
-    //         .post(format!("http://{}{}", self.address, path))
-    //         .headers(headers)
-    //         .body(body)
-    //         .send()
-    //         .await
-    //         .expect("Failed to send POST request")
-    // }
+    pub async fn post(&self, path: &str, body: &serde_json::Value) -> Response {
+        self.client
+            .post(format!("http://{}{}", self.address, path))
+            .json(body)
+            .send()
+            .await
+            .expect("Failed to send POST request")
+    }
 
     pub async fn form<T: Serialize + ?Sized>(&self, path: &str, parameter: &T) -> Response {
         self.client
@@ -136,6 +135,10 @@ impl App {
 
     pub async fn post_subscriptions<T: Serialize + ?Sized>(&self, parameter: &T) -> Response {
         self.form("/subscriptions", parameter).await
+    }
+
+    pub async fn post_newsletters(&self, body: &serde_json::Value) -> Response {
+        self.post("/newsletters", body).await
     }
 }
 

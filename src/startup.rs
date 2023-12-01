@@ -14,7 +14,7 @@ use uuid::Uuid;
 use crate::{
     configuration::Settings,
     email_client::EmailClient,
-    routes::{check_health, confirm, subscribe},
+    routes::{check_health, confirm, publish_newsletter, subscribe},
 };
 
 #[derive(Clone)]
@@ -47,6 +47,7 @@ impl FromRef<AppState> for AccessUrl {
 
 pub async fn run(listener: TcpListener, app_state: AppState) {
     let app = Router::new()
+        .route("/newsletters", post(publish_newsletter))
         .route("/subscriptions/confirm", get(confirm))
         .route("/subscriptions", post(subscribe))
         .with_state(app_state)

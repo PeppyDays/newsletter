@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use validator::validate_email;
 
 #[derive(Debug, Clone)]
@@ -9,6 +11,12 @@ impl SubscriberEmail {
             true => Ok(Self(s)),
             false => Err(format!("{} is not a valid subscriber email", s)),
         }
+    }
+}
+
+impl Display for SubscriberEmail {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
