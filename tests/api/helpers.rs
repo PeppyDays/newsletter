@@ -28,8 +28,8 @@ static TRACING: Lazy<()> = Lazy::new(|| {
 });
 
 pub struct App {
-    address: SocketAddr,
-    client: Client,
+    pub address: SocketAddr,
+    pub client: Client,
     pub pool: Pool<Postgres>,
     pub email_server: MockServer,
 }
@@ -109,14 +109,14 @@ impl App {
             .expect("Failed to send GET request")
     }
 
-    pub async fn post(&self, path: &str, body: &serde_json::Value) -> Response {
-        self.client
-            .post(format!("http://{}{}", self.address, path))
-            .json(body)
-            .send()
-            .await
-            .expect("Failed to send POST request")
-    }
+    // pub async fn post(&self, path: &str, body: &serde_json::Value) -> Response {
+    //     self.client
+    //         .post(format!("http://{}{}", self.address, path))
+    //         .json(body)
+    //         .send()
+    //         .await
+    //         .expect("Failed to send POST request")
+    // }
 
     pub async fn form<T: Serialize + ?Sized>(&self, path: &str, parameter: &T) -> Response {
         self.client
@@ -138,7 +138,15 @@ impl App {
     }
 
     pub async fn post_newsletters(&self, body: &serde_json::Value) -> Response {
-        self.post("/newsletters", body).await
+        let (username, password) = self.add_test_user().await;
+
+        self.client
+            .post(&format!("http://{}{}", self.address, "/newsletters"))
+            .json(body)
+            .basic_auth(username, Some(password))
+            .send()
+            .await
+            .expect("Failed to execute request")
     }
 }
 
@@ -167,5 +175,22 @@ impl App {
             in_html: reqwest::Url::parse(link_in_html).unwrap(),
             in_text: reqwest::Url::parse(link_in_text).unwrap(),
         }
+    }
+
+    pub async fn add_test_user(&self) -> (String, String) {
+        let username = Uuid::new_v4().to_string();
+        let password = Uuid::new_v4().to_string();
+
+        sqlx::query!(
+            "INSERT INTO users (user_id, username, password) VALUES ($1, $2, $3)",
+            Uuid::new_v4(),
+            username,
+            password,
+        )
+        .execute(&self.pool)
+        .await
+        .expect("Failed to create test user");
+
+        (username, password)
     }
 }

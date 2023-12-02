@@ -77,6 +77,33 @@ async fn newsletters_returns_422_for_invalid_data() {
     }
 }
 
+#[tokio::test]
+async fn requests_missing_authorization_are_rejected() {
+    let app = App::new().await;
+
+    let body = serde_json::json!({
+        "title": "newsletter",
+        "content": {
+            "text": "hi",
+            "html": "there",
+        }
+    });
+
+    let response = app
+        .client
+        .post(&format!("http://{}{}", app.address, "/newsletters"))
+        .json(&body)
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    // assert_eq!(
+    //     response.headers()["WWW-Authenticate"],
+    //     r#"Basic realm="publish""#
+    // );
+}
+
 async fn create_unconfirmed_subscriber(app: &App) -> ConfirmationLinks {
     let parameter = [("name", "arine"), ("email", "peppydays@gmail.com")];
 

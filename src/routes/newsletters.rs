@@ -1,12 +1,17 @@
 use std::fmt::Debug;
 
 use anyhow::Context;
-use axum::extract::State;
-use axum::http::StatusCode;
+use axum::headers::authorization::Basic;
+use axum::headers::Authorization;
+use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::IntoResponse;
 use axum::Json;
+use axum::{extract::State, TypedHeader};
+use reqwest::header::WWW_AUTHENTICATE;
+use secrecy::{ExposeSecret, Secret};
 use serde::Deserialize;
 use sqlx::{Pool, Postgres};
+use uuid::Uuid;
 
 use crate::{domain::SubscriberEmail, email_client::EmailClient};
 
@@ -19,18 +24,41 @@ pub struct BodyData {
 #[derive(Deserialize)]
 pub struct Content {
     html: String,
-    text: String,
+}
+
+struct Credentials {
+    username: String,
+    password: Secret<String>,
+}
+
+impl From<Authorization<Basic>> for Credentials {
+    fn from(auth: Authorization<Basic>) -> Self {
+        let username = auth.username();
+        let password = auth.password();
+
+        Self {
+            username: username.into(),
+            password: Secret::new(password.into()),
+        }
+    }
 }
 
 #[tracing::instrument(
     name = "Sending newsletter to the subscribers",
-    skip(pool, email_client, body)
+    skip(pool, email_client, body, authorization)
 )]
 pub async fn publish_newsletter(
     State(pool): State<Pool<Postgres>>,
     State(email_client): State<EmailClient>,
+    TypedHeader(authorization): TypedHeader<Authorization<Basic>>,
     Json(body): Json<BodyData>,
 ) -> Result<(), PublishError> {
+    let credentials: Credentials = authorization.into();
+
+    tracing::Span::current().record("username", &tracing::field::display(&credentials.username));
+    let user_id = validate_credentials(credentials, &pool).await?;
+    tracing::Span::current().record("user_id", &tracing::field::display(&user_id));
+
     let confirmed_subscribers = get_confirmed_subscribers(&pool).await?;
 
     for subscriber in confirmed_subscribers {
@@ -85,8 +113,31 @@ async fn get_confirmed_subscribers(
     Ok(subscribers)
 }
 
+#[tracing::instrument(name = "Validate credential of subscriber", skip(pool, credentials))]
+async fn validate_credentials(
+    credentials: Credentials,
+    pool: &Pool<Postgres>,
+) -> Result<Uuid, PublishError> {
+    let user_id: Option<_> = sqlx::query!(
+        r#"SELECT user_id FROM users WHERE username = $1 AND password = $2"#,
+        credentials.username,
+        credentials.password.expose_secret(),
+    )
+    .fetch_optional(pool)
+    .await
+    .context("Failed to perform a query to validate auth credentials")
+    .map_err(PublishError::UnexpectedError)?;
+
+    user_id
+        .map(|r| r.user_id)
+        .ok_or_else(|| anyhow::anyhow!("Invalid username or password"))
+        .map_err(PublishError::AuthError)
+}
+
 #[derive(thiserror::Error)]
 pub enum PublishError {
+    #[error("Authentication failed")]
+    AuthError(#[source] anyhow::Error),
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
 }
@@ -100,9 +151,23 @@ impl Debug for PublishError {
 impl IntoResponse for PublishError {
     fn into_response(self) -> axum::response::Response {
         match self {
+            PublishError::AuthError(_) => {
+                let mut headers = HeaderMap::new();
+                headers.append(
+                    WWW_AUTHENTICATE,
+                    HeaderValue::from_static(r#"Basic realm="publish"#),
+                );
+
+                (StatusCode::UNAUTHORIZED, headers, Json(self.to_string()))
+            }
             PublishError::UnexpectedError(_) => {
                 tracing::error!("{:?}", self);
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(self.to_string()))
+
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    HeaderMap::new(),
+                    Json(self.to_string()),
+                )
             }
         }
         .into_response()
