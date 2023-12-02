@@ -10,6 +10,7 @@ use axum::{extract::State, TypedHeader};
 use reqwest::header::WWW_AUTHENTICATE;
 use secrecy::{ExposeSecret, Secret};
 use serde::Deserialize;
+use sha3::Digest;
 use sqlx::{Pool, Postgres};
 use uuid::Uuid;
 
@@ -118,10 +119,15 @@ async fn validate_credentials(
     credentials: Credentials,
     pool: &Pool<Postgres>,
 ) -> Result<Uuid, PublishError> {
+    let password_hash = format!(
+        "{:x}",
+        sha3::Sha3_256::digest(credentials.password.expose_secret().as_bytes())
+    );
+
     let user_id: Option<_> = sqlx::query!(
-        r#"SELECT user_id FROM users WHERE username = $1 AND password = $2"#,
+        r#"SELECT user_id FROM users WHERE username = $1 AND password_hash = $2"#,
         credentials.username,
-        credentials.password.expose_secret(),
+        password_hash,
     )
     .fetch_optional(pool)
     .await

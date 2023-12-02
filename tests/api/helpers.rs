@@ -2,17 +2,18 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 
 use once_cell::sync::Lazy;
 use reqwest::{Client, Response};
+use secrecy::ExposeSecret;
+use serde::Serialize;
+use sha3::Digest;
+use sqlx::{Connection, Executor, PgConnection, Pool, Postgres};
+use uuid::Uuid;
+use wiremock::MockServer;
 
 use newsletter::{
     configuration::{get_configuration, Settings},
     startup::{get_app_state, run},
     telemetry::{get_subscriber, initialize_subscriber},
 };
-use secrecy::ExposeSecret;
-use serde::Serialize;
-use sqlx::{Connection, Executor, PgConnection, Pool, Postgres};
-use uuid::Uuid;
-use wiremock::MockServer;
 
 static TRACING: Lazy<()> = Lazy::new(|| {
     let default_filter_level = "info".to_string();
@@ -180,12 +181,13 @@ impl App {
     pub async fn add_test_user(&self) -> (String, String) {
         let username = Uuid::new_v4().to_string();
         let password = Uuid::new_v4().to_string();
+        let password_hash = format!("{:x}", sha3::Sha3_256::digest(password.as_bytes()));
 
         sqlx::query!(
-            "INSERT INTO users (user_id, username, password) VALUES ($1, $2, $3)",
+            "INSERT INTO users (user_id, username, password_hash) VALUES ($1, $2, $3)",
             Uuid::new_v4(),
             username,
-            password,
+            password_hash,
         )
         .execute(&self.pool)
         .await
