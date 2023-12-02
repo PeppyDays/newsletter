@@ -71,8 +71,6 @@ pub async fn run(listener: TcpListener, app_state: AppState) {
         );
 
     axum::serve(listener, app)
-        // .expect("Failed to start up the application")
-        // .serve(app.into_make_service())
         .await
         .expect("Failed to start up the application");
 }

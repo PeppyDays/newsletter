@@ -1,4 +1,4 @@
-use reqwest::StatusCode;
+use reqwest::{Method, StatusCode};
 use wiremock::{
     matchers::{method, path},
     Mock, ResponseTemplate,
@@ -7,10 +7,15 @@ use wiremock::{
 use crate::helpers::App;
 
 #[tokio::test]
-async fn confirmations_without_toekn_are_rejected_with_400() {
+async fn confirmations_without_token_are_rejected_with_400() {
     let app = App::new().await;
 
-    let response = app.get("/subscriptions/confirm").await;
+    // send request without token
+    let response = app
+        .build_request(Method::GET, "/subscriptions/confirm")
+        .send()
+        .await
+        .unwrap();
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }

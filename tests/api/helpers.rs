@@ -1,7 +1,7 @@
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 
 use once_cell::sync::Lazy;
-use reqwest::{Client, Response};
+use reqwest::{Client, Method, Response};
 use secrecy::ExposeSecret;
 use serde::Serialize;
 use sha3::Digest;
@@ -10,22 +10,20 @@ use tokio::net::TcpListener;
 use uuid::Uuid;
 use wiremock::MockServer;
 
-use newsletter::{
-    configuration::{get_configuration, Settings},
-    startup::{get_app_state, run},
-    telemetry::{get_subscriber, initialize_subscriber},
-};
+use newsletter::{configuration, startup, telemetry};
 
 static TRACING: Lazy<()> = Lazy::new(|| {
     let default_filter_level = "info".to_string();
     let subscriber_name = "test".to_string();
 
     if std::env::var("TEST_LOG").is_ok() {
-        let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::stdout);
-        initialize_subscriber(subscriber);
+        let subscriber =
+            telemetry::get_subscriber(subscriber_name, default_filter_level, std::io::stdout);
+        telemetry::initialize_subscriber(subscriber);
     } else {
-        let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::sink);
-        initialize_subscriber(subscriber);
+        let subscriber =
+            telemetry::get_subscriber(subscriber_name, default_filter_level, std::io::sink);
+        telemetry::initialize_subscriber(subscriber);
     };
 });
 
@@ -50,7 +48,8 @@ impl App {
         let email_server = MockServer::start().await;
 
         // get configuration and randomise database name
-        let mut configuration = get_configuration().expect("Failed to read configuration");
+        let mut configuration =
+            configuration::get_configuration().expect("Failed to read configuration");
         configuration.application.access_url = format!("http://{}", address);
         configuration.database.database = Uuid::new_v4().to_string();
         configuration.email_client.access_url = email_server.uri();
@@ -59,7 +58,7 @@ impl App {
         App::initialise_database(&configuration).await;
 
         // configure app state
-        let app_state = get_app_state(&configuration).await;
+        let app_state = startup::get_app_state(&configuration).await;
 
         // get database pool
         let pool = app_state.pool.clone();
@@ -71,7 +70,7 @@ impl App {
             .expect("Failed to migrate the database");
 
         // start a server
-        tokio::spawn(run(listener, app_state));
+        tokio::spawn(startup::run(listener, app_state));
 
         // provide a reqwest client
         let client = Client::new();
@@ -84,7 +83,7 @@ impl App {
         }
     }
 
-    async fn initialise_database(configuration: &Settings) {
+    async fn initialise_database(configuration: &configuration::Settings) {
         // create a connection to postgres database
         // and create randomised database
         let mut connection = PgConnection::connect(
@@ -104,52 +103,51 @@ impl App {
 }
 
 impl App {
-    pub async fn get(&self, path: &str) -> Response {
-        self.client
-            .get(format!("http://{}{}", self.address, path))
-            .send()
-            .await
-            .expect("Failed to send GET request")
+    pub fn build_request(&self, method: Method, path: &str) -> reqwest::RequestBuilder {
+        let url = format!("http://{}{}", self.address, path);
+
+        if method == Method::GET {
+            self.client.get(url)
+        } else if method == Method::POST {
+            self.client.post(url)
+        } else {
+            panic!("No implementation for this request method {}", method)
+        }
     }
 
-    // pub async fn post(&self, path: &str, body: &serde_json::Value) -> Response {
-    //     self.client
-    //         .post(format!("http://{}{}", self.address, path))
-    //         .json(body)
-    //         .send()
-    //         .await
-    //         .expect("Failed to send POST request")
-    // }
-
-    pub async fn form<T: Serialize + ?Sized>(&self, path: &str, parameter: &T) -> Response {
-        self.client
-            .post(format!("http://{}{}", self.address, path))
-            .form(parameter)
-            .send()
-            .await
-            .expect("Failed to send POST form request")
-    }
-}
-
-impl App {
     pub async fn get_health_check(&self) -> Response {
-        self.get("/health_check").await
+        self.build_request(Method::GET, "/health_check")
+            .send()
+            .await
+            .unwrap()
     }
 
     pub async fn post_subscriptions<T: Serialize + ?Sized>(&self, parameter: &T) -> Response {
-        self.form("/subscriptions", parameter).await
+        self.build_request(Method::POST, "/subscriptions")
+            .form(parameter)
+            .send()
+            .await
+            .unwrap()
+    }
+
+    #[allow(dead_code)]
+    pub async fn get_subscriptions_confirm(&self, subscription_token: &str) -> Response {
+        self.build_request(Method::GET, "/subscriptions/confirm")
+            .query(&[("subscription_token", subscription_token)])
+            .send()
+            .await
+            .unwrap()
     }
 
     pub async fn post_newsletters(&self, body: &serde_json::Value) -> Response {
         let (username, password) = self.add_test_user().await;
 
-        self.client
-            .post(&format!("http://{}{}", self.address, "/newsletters"))
+        self.build_request(Method::POST, "/newsletters")
             .json(body)
             .basic_auth(username, Some(password))
             .send()
             .await
-            .expect("Failed to execute request")
+            .unwrap()
     }
 }
 
@@ -179,7 +177,9 @@ impl App {
             in_text: reqwest::Url::parse(link_in_text).unwrap(),
         }
     }
+}
 
+impl App {
     pub async fn add_test_user(&self) -> (String, String) {
         let username = Uuid::new_v4().to_string();
         let password = Uuid::new_v4().to_string();
