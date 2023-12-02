@@ -1,4 +1,4 @@
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 
 use once_cell::sync::Lazy;
 use reqwest::{Client, Response};
@@ -6,6 +6,7 @@ use secrecy::ExposeSecret;
 use serde::Serialize;
 use sha3::Digest;
 use sqlx::{Connection, Executor, PgConnection, Pool, Postgres};
+use tokio::net::TcpListener;
 use uuid::Uuid;
 use wiremock::MockServer;
 
@@ -41,6 +42,7 @@ impl App {
 
         // configure listener
         let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+            .await
             .expect("Failed to start an test application");
         let address = listener.local_addr().unwrap();
 

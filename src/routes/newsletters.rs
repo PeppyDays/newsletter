@@ -1,13 +1,14 @@
 use std::fmt::Debug;
 
 use anyhow::Context;
-use axum::headers::authorization::Basic;
-use axum::headers::Authorization;
+use axum::extract::State;
+use axum::http::header::WWW_AUTHENTICATE;
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::IntoResponse;
 use axum::Json;
-use axum::{extract::State, TypedHeader};
-use reqwest::header::WWW_AUTHENTICATE;
+use axum_extra::headers::authorization::Basic;
+use axum_extra::headers::Authorization;
+use axum_extra::TypedHeader;
 use secrecy::{ExposeSecret, Secret};
 use serde::Deserialize;
 use sha3::Digest;

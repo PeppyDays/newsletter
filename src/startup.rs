@@ -1,13 +1,14 @@
-use std::{net::TcpListener, time::Duration};
+use std::time::Duration;
 
 use axum::{
     extract::{FromRef, MatchedPath},
     http::Request,
     routing::{get, post},
-    Router, Server,
+    Router,
 };
 use secrecy::ExposeSecret;
 use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
+use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use uuid::Uuid;
 
@@ -69,9 +70,9 @@ pub async fn run(listener: TcpListener, app_state: AppState) {
             }),
         );
 
-    Server::from_tcp(listener)
-        .expect("Failed to start up the application")
-        .serve(app.into_make_service())
+    axum::serve(listener, app)
+        // .expect("Failed to start up the application")
+        // .serve(app.into_make_service())
         .await
         .expect("Failed to start up the application");
 }
@@ -81,6 +82,7 @@ pub async fn get_listener(configuration: &Settings) -> TcpListener {
         "{}:{}",
         configuration.application.host, configuration.application.port,
     ))
+    .await
     .expect("Failed to bind a port for application")
 }
 
