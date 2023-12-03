@@ -1,4 +1,5 @@
 use reqwest::StatusCode;
+use uuid::Uuid;
 use wiremock::{
     matchers::{any, method, path},
     Mock, ResponseTemplate,
@@ -98,10 +99,65 @@ async fn requests_missing_authorization_are_rejected() {
         .expect("Failed to execute request");
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    // assert_eq!(
-    //     response.headers()["WWW-Authenticate"],
-    //     r#"Basic realm="publish""#
-    // );
+}
+
+#[tokio::test]
+async fn non_existing_user_is_rejected() {
+    let app = App::new().await;
+
+    let username = Uuid::new_v4().to_string();
+    let password = Uuid::new_v4().to_string();
+    let body = serde_json::json!({
+        "title": "newsletter",
+        "content": {
+            "text": "hi",
+            "html": "there",
+        }
+    });
+
+    let response = app
+        .client
+        .post(&format!("http://{}{}", app.address, "/newsletters"))
+        .json(&body)
+        .basic_auth(username, Some(password))
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        response.headers()["WWW-Authenticate"],
+        r#"Basic realm="publish"#
+    );
+}
+
+#[tokio::test]
+async fn invalid_password_is_rejected() {
+    let app = App::new().await;
+
+    let (username, _password) = app.add_test_user().await;
+    let body = serde_json::json!({
+        "title": "newsletter",
+        "content": {
+            "text": "hi",
+            "html": "there",
+        }
+    });
+
+    let response = app
+        .client
+        .post(&format!("http://{}{}", app.address, "/newsletters"))
+        .json(&body)
+        .basic_auth(username, Some(String::from("123")))
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        response.headers()["WWW-Authenticate"],
+        r#"Basic realm="publish"#
+    );
 }
 
 async fn create_unconfirmed_subscriber(app: &App) -> ConfirmationLinks {
