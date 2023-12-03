@@ -1,10 +1,10 @@
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 
+use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
 use once_cell::sync::Lazy;
 use reqwest::{Client, Method, Response};
 use secrecy::ExposeSecret;
 use serde::Serialize;
-use sha3::Digest;
 use sqlx::{Connection, Executor, PgConnection, Pool, Postgres};
 use tokio::net::TcpListener;
 use uuid::Uuid;
@@ -183,7 +183,13 @@ impl App {
     pub async fn add_test_user(&self) -> (String, String) {
         let username = Uuid::new_v4().to_string();
         let password = Uuid::new_v4().to_string();
-        let password_hash = format!("{:x}", sha3::Sha3_256::digest(password.as_bytes()));
+        let password_hash = Argon2::default()
+            .hash_password(
+                password.as_bytes(),
+                &SaltString::generate(&mut rand::thread_rng()),
+            )
+            .unwrap()
+            .to_string();
 
         sqlx::query!(
             "INSERT INTO users (user_id, username, password_hash) VALUES ($1, $2, $3)",

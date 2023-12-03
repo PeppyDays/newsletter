@@ -12,6 +12,7 @@ name = "newsletter"
 
 [dependencies]
 anyhow = "1"
+argon2 = { version = "0.5", features = ["std"] }
 axum = { version = "0.7", features = ["tracing"] }
 axum-extra = { version = "0.9", features = ["typed-header"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
@@ -22,7 +23,6 @@ secrecy = { version = "0.8", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde-aux = "4"
 serde_json = "1"
-sha3 = "0.10"
 sqlx = { version = "0.7", default-features = false, features = ["uuid", "migrate", "chrono", "postgres", "macros", "runtime-tokio-rustls"] }
 thiserror = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
