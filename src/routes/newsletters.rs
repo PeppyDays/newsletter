@@ -15,6 +15,7 @@ use serde::Deserialize;
 use sqlx::{Pool, Postgres};
 use uuid::Uuid;
 
+use crate::telemetry::spawn_blocking_with_tracing;
 use crate::{domain::SubscriberEmail, email_client::EmailClient};
 
 #[derive(Deserialize)]
@@ -120,33 +121,57 @@ async fn validate_credentials(
     credentials: Credentials,
     pool: &Pool<Postgres>,
 ) -> Result<Uuid, PublishError> {
-    let row = sqlx::query!(
-        "SELECT user_id, password_hash FROM users WHERE username = $1",
-        credentials.username,
-    )
-    .fetch_optional(pool)
+    let (user_id, expected_password_hash) = get_stored_credentials(&credentials.username, pool)
+        .await
+        .map_err(PublishError::UnexpectedError)?
+        .ok_or_else(|| PublishError::AuthError(anyhow::anyhow!("Unknown username")))?;
+
+    spawn_blocking_with_tracing(move || {
+        verify_password_hash(expected_password_hash, credentials.password)
+    })
     .await
-    .context("Failed to perform a query to validate auth credentials")
-    .map_err(PublishError::UnexpectedError)?;
+    .context("Failed to spawn blocking task")
+    .map_err(PublishError::UnexpectedError)??;
 
-    let (expected_password_hash, user_id) = match row {
-        Some(row) => (row.password_hash, row.user_id),
-        None => return Err(PublishError::AuthError(anyhow::anyhow!("Unknown username"))),
-    };
+    Ok(user_id)
+}
 
-    let expected_password_hash = PasswordHash::new(&expected_password_hash)
+#[tracing::instrument(
+    name = "Verify password hash",
+    skip(expected_password_hash, password_candidate)
+)]
+fn verify_password_hash(
+    expected_password_hash: Secret<String>,
+    password_candidate: Secret<String>,
+) -> Result<(), PublishError> {
+    let expected_password_hash = PasswordHash::new(expected_password_hash.expose_secret())
         .context("Failed to parse hash in PHC string format")
         .map_err(PublishError::UnexpectedError)?;
 
     Argon2::default()
         .verify_password(
-            credentials.password.expose_secret().as_bytes(),
+            password_candidate.expose_secret().as_bytes(),
             &expected_password_hash,
         )
         .context("Invalid password")
-        .map_err(PublishError::AuthError)?;
+        .map_err(PublishError::AuthError)
+}
 
-    Ok(user_id)
+#[tracing::instrument(name = "Get stored credentials", skip(username, pool))]
+async fn get_stored_credentials(
+    username: &str,
+    pool: &Pool<Postgres>,
+) -> Result<Option<(Uuid, Secret<String>)>, anyhow::Error> {
+    let row = sqlx::query!(
+        "SELECT user_id, password_hash FROM users WHERE username = $1",
+        username,
+    )
+    .fetch_optional(pool)
+    .await
+    .context("Failed to perform a query to validate auth credentials")?
+    .map(|row| (row.user_id, Secret::new(row.password_hash)));
+
+    Ok(row)
 }
 
 #[derive(thiserror::Error)]
