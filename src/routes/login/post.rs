@@ -70,10 +70,19 @@ fn error_chain_fmt(
 
 impl IntoResponse for LoginError {
     fn into_response(self) -> axum::response::Response {
-        match self {
+        let encoded_error = urlencoding::Encoded::new(self.to_string());
+
+        let mut headers = HeaderMap::new();
+        headers.append(
+            LOCATION,
+            HeaderValue::from_str(&format!("/login?error={}", encoded_error)).unwrap(),
+        );
+
+        let status_code = match self {
             LoginError::AuthError(_) => StatusCode::UNAUTHORIZED,
             LoginError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-        }
-        .into_response()
+        };
+
+        (status_code, headers).into_response()
     }
 }
